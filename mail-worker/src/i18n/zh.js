@@ -1,4 +1,6 @@
 const zh = {
+	invalidMailboxOrder: '邮箱排列数据无效，请刷新列表后重试',
+	mailboxOrderConflict: '邮箱列表已发生变化，请刷新后重新调整顺序',
 	IncorrectPwd: '密码输入错误',
 	addAccountDisabled: '添加邮箱功能已关闭',
 	regDisabled: '注册功能已关闭',

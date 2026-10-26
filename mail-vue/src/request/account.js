@@ -23,3 +23,11 @@ export function accountSetAllReceive(accountId) {
 export function accountSetAsTop(accountId) {
     return http.put('/account/setAsTop', {accountId})
 }
+
+export function accountOrder() {
+    return http.get('/account/order');
+}
+
+export function accountSaveOrder(order) {
+    return http.put('/account/order', order, {noMsg: true});
+}

@@ -1,0 +1,143 @@
+.account-box {
+  position: relative;
+  .head-opt { gap: 4px; }
+  .item {
+    transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+    margin-bottom: 8px;
+    .account { flex: 1; min-width: 0; margin-bottom: 0; font-size: 14px; font-weight: 600; }
+    .opt { grid-row: 3; }
+    :deep(.el-card__body) { display: grid; grid-template-rows: 21px 20px 22px; }
+  }
+  .item:first-child { margin-top: 2px; }
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 30px;
+  padding: 2px;
+  color: var(--el-text-color-primary);
+  cursor: pointer;
+
+  &:disabled { cursor: default; opacity: .45; }
+  &:focus-visible { outline: 2px solid var(--el-color-primary); border-radius: 4px; }
+}
+
+.main-first-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.sort-button { gap: 2px; font-size: 12px; white-space: nowrap; }
+
+.order-status {
+  position: absolute;
+  top: 40px;
+  right: 12px;
+  z-index: 2;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--el-bg-color);
+  color: var(--el-color-primary);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.account-skeleton { padding: 15px; }
+.order-load-error { padding: 20px 12px; text-align: center; }
+.order-load-error p { margin-bottom: 12px; }
+.account-section { padding-top: 0; }
+.group-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 18px;
+  line-height: 18px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.group-count { font-size: 11px; font-weight: 400; }
+.group-list { min-height: 16px; padding-bottom: 1px; }
+.group-list .item:last-child { margin-bottom: 4px; }
+.group-list.is-fixed { padding-top: 6px; }
+.group-list.is-empty:not(.is-fixed) {
+  min-height: 32px;
+  margin: 2px 10px 4px;
+  border: 1px dashed var(--el-border-color);
+  border-radius: 7px;
+}
+.group-empty {
+  padding: 6px 8px;
+  color: var(--el-text-color-placeholder);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+.account-title { grid-row: 1; display: flex; align-items: center; gap: 4px; min-width: 0; }
+.mailbox-drag-handle {
+  display: inline-flex;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+  min-height: 21px;
+  margin-left: auto;
+  border-radius: 4px;
+  color: var(--el-text-color-secondary);
+  cursor: grab;
+  touch-action: none;
+  &:hover { background: var(--el-fill-color-light); color: var(--el-color-primary); }
+  &:active { cursor: grabbing; }
+  &:disabled { cursor: default; opacity: .4; }
+  &:focus-visible { outline: 2px solid var(--el-color-primary); border-radius: 3px; }
+}
+.mailbox-badges { grid-row: 2; align-self: center; display: flex; flex-wrap: nowrap; gap: 5px; margin: 0; }
+.mailbox-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+.main-badge { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+.pinned-badge { color: var(--el-color-warning); background: var(--el-color-warning-light-9); }
+.mailbox-menu { min-width: 24px; min-height: 22px; padding: 0; }
+.account-box .mailbox-item.mailbox-ghost:not(.mailbox-drag-preview) {
+  opacity: 1;
+  background: var(--el-color-primary-light-9);
+  border: 1px dashed var(--el-color-primary);
+  box-shadow: none;
+
+  :deep(.el-card__body) { opacity: .35; }
+}
+.account-box .mailbox-item.mailbox-drag-preview {
+  transition: none !important;
+  animation: none !important;
+  opacity: 1 !important;
+  background: var(--el-bg-color) !important;
+  border-color: var(--el-color-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+
+  :deep(.el-card__body) { visibility: visible; }
+}
+.mailbox-chosen { border-color: var(--el-color-primary); }
+.load-more {
+  display: block;
+  width: calc(100% - 20px);
+  margin: 0 10px 10px;
+  padding: 8px;
+  color: var(--el-color-primary);
+  font-size: 12px;
+  cursor: pointer;
+  &:focus-visible { outline: 2px solid var(--el-color-primary); border-radius: 4px; }
+}

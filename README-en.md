@@ -145,6 +145,12 @@ cloud-mail
 
 ```
 
+## Custom features in this fork
+
+Primary mailbox badges and a fixed-position switch, pinned groups, cross-group dragging, sorting by name or creation time, automatic saving, and restored UI typography.
+
+Local checks: run `pnpm test:local` in `mail-worker/` and `pnpm build` in `mail-vue/`.
+
 ## License
 
 This project is licensed under the [MIT](LICENSE) license.

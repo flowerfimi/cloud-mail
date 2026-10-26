@@ -5,13 +5,14 @@ import userService from './user-service';
 import emailService from './email-service';
 import orm from '../entity/orm';
 import account from '../entity/account';
-import { and, asc, eq, gt, inArray, count, sql, ne, or, lt, desc } from 'drizzle-orm';
+import { and, eq, inArray, count, sql, ne } from 'drizzle-orm';
 import {accountConst, isDel, settingConst} from '../const/entity-const';
 import settingService from './setting-service';
 import turnstileService from './turnstile-service';
 import roleService from './role-service';
 import { t } from '../i18n/i18n';
 import verifyRecordService from './verify-record-service';
+import mailboxOrderService from './mailbox-order-service';
 
 const accountService = {
 
@@ -96,7 +97,10 @@ const accountService = {
 		}
 
 
-		accountRow = await orm(c).insert(account).values({ email: email, userId: userId, name: emailUtils.getName(email) }).returning().get();
+		accountRow = await orm(c).insert(account).values({
+			email, userId, name: emailUtils.getName(email),
+			sort: sql`(SELECT COALESCE(MIN(sort), 0) - 1 FROM account WHERE user_id = ${userId} AND is_del = 0 AND is_pinned = 0)`
+		}).returning().get();
 
 		if (addEmailVerify === settingConst.addEmailVerify.COUNT && !addVerifyOpen) {
 			const row = await verifyRecordService.increaseAddCount(c);
@@ -112,40 +116,7 @@ const accountService = {
 	},
 
 	list(c, params, userId) {
-
-		let { accountId, size, lastSort } = params;
-
-		accountId = Number(accountId);
-		size = Number(size);
-		lastSort = Number(lastSort);
-
-		if (size > 30) {
-			size = 30;
-		}
-
-		if (!accountId) {
-			accountId = 0;
-		}
-
-		if(Number.isNaN(lastSort)) {
-			lastSort = 9999999999;
-		}
-
-		return orm(c).select().from(account).where(
-			and(
-				eq(account.userId, userId),
-				eq(account.isDel, isDel.NORMAL),
-					or(
-						lt(account.sort, lastSort),
-						and(
-							eq(account.sort, lastSort),
-							gt(account.accountId, accountId)
-						)
-					))
-				)
-			.orderBy(desc(account.sort), asc(account.accountId))
-			.limit(size)
-			.all();
+		return mailboxOrderService.list(c, params, userId);
 	},
 
 	async delete(c, params, userId) {
@@ -272,12 +243,7 @@ const accountService = {
 	},
 
 	async setAsTop(c, params, userId) {
-		const { accountId } = params;
-		const userRow = await userService.selectById(c, userId);
-		const mainAccountRow = await accountService.selectByEmailIncludeDel(c, userRow.email);
-		let mainSort = mainAccountRow.sort === 0 ? 2 : mainAccountRow.sort + 1;
-		await orm(c).update(account).set({ sort: mainSort }).where(eq(account.accountId, mainAccountRow.accountId)).run();
-		await orm(c).update(account).set({ sort: mainSort - 1 }).where(and(eq(account.accountId, accountId),eq(account.userId,userId))).run();
+		return mailboxOrderService.setAsTop(c, params, userId);
 	}
 };
 

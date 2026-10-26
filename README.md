@@ -150,6 +150,12 @@ cloud-mail
 └── └── env.release                # 项目配置
 ```
 
+## 本 fork 的定制功能
+
+主邮箱标记与固定开关、置顶分组、跨组拖拽、名称／创建时间排序及自动保存；恢复旧版界面字体。
+
+本地验证：在 `mail-worker/` 执行 `pnpm test:local`，在 `mail-vue/` 执行 `pnpm build`。
+
 ## 许可证
 
 本项目采用 [MIT](LICENSE) 许可证	

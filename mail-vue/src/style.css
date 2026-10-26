@@ -1,3 +1,12 @@
+/* Use a UI-only family name so email content keeps its existing font fallback. */
+@font-face {
+    font-family: "Cloud Mail Inter";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('/fonts/inter/InterVariable.woff2') format('woff2');
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -27,7 +36,7 @@ html, body {
 }
 
 body {
-    font-family: Inter, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
+    font-family: -apple-system, "Cloud Mail Inter", BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
     line-height: 1.5;
     color: var(--el-text-color-primary);
     font-size: 14px;

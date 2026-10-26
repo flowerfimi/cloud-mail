@@ -1,6 +1,7 @@
 import settingService from '../service/setting-service';
 import emailUtils from '../utils/email-utils';
 import {emailConst} from "../const/entity-const";
+import { migrateMailboxOrder } from './mailbox-order';
 
 const dbInit = {
 	async init(c) {
@@ -33,6 +34,7 @@ const dbInit = {
 		await this.v3_2DB(c);
 		await this.v3_3DB(c);
 		await this.v3_4DB(c);
+		await migrateMailboxOrder(c.env.db);
 		await settingService.refresh(c);
 		return c.text('success');
 	},
