@@ -1,4 +1,6 @@
 const en = {
+	invalidMailboxOrder: 'Invalid mailbox order. Refresh the list and try again.',
+	mailboxOrderConflict: 'The mailbox list has changed. Refresh it before reordering.',
 	IncorrectPwd: 'Incorrect password',
 	addAccountDisabled: 'Add Email Address feature is disabled',
 	regDisabled: 'Sign up is disabled',

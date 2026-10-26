@@ -1,79 +1,83 @@
 <template>
   <div class="account-box">
     <div class="head-opt">
-      <Icon v-perm="'account:add'" class="icon add" icon="ion:add-outline" width="23" height="23" @click="add"/>
-      <Icon class="icon refresh" icon="ion:reload" width="18" height="18" @click="refresh"/>
+      <button v-perm="'account:add'" class="icon-button" type="button" :disabled="orderBusy" :aria-label="$t('addAccount')" :title="$t('addAccount')" @click="add">
+        <Icon icon="ion:add-outline" width="23" height="23"/>
+      </button>
+      <button class="icon-button" type="button" :disabled="orderBusy" :aria-label="$t('mailboxOrder.refresh')" :title="$t('mailboxOrder.refresh')" @click="refresh">
+        <Icon icon="ion:reload" width="18" height="18"/>
+      </button>
+      <el-dropdown trigger="click" :disabled="orderBusy || !canOrder" @command="sortBy">
+        <button class="icon-button sort-button" type="button" :disabled="orderBusy || !canOrder" :aria-label="$t('mailboxOrder.sort')">
+          <Icon :icon="mailboxIcons.sort" width="17" height="17"/>
+          <span>{{ $t('mailboxOrder.sort') }}</span>
+        </button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="email:asc">{{ $t('mailboxOrder.nameAscending') }}</el-dropdown-item>
+            <el-dropdown-item command="email:desc">{{ $t('mailboxOrder.nameDescending') }}</el-dropdown-item>
+            <el-dropdown-item command="createTime:desc" divided>{{ $t('mailboxOrder.newestFirst') }}</el-dropdown-item>
+            <el-dropdown-item command="createTime:asc">{{ $t('mailboxOrder.oldestFirst') }}</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+      <label class="main-first-control">
+        <span>{{ $t('mailboxOrder.mainFirst') }}</span>
+        <el-switch size="small" :model-value="order.mainFirst" :disabled="orderBusy || !canOrder" :aria-label="$t('mailboxOrder.mainFirst')" @change="setMainFirst"/>
+      </label>
     </div>
+    <div class="order-status" role="status" aria-live="polite" v-if="saving">{{ $t('mailboxOrder.saving') }}</div>
     <el-scrollbar class="scrollbar" ref="scrollbarRef">
-      <div v-infinite-scroll="getAccountList" :infinite-scroll-distance="600" :infinite-scroll-immediate="false">
-        <el-card class="item" :class="itemBg(item.accountId)" v-for="(item, index) in accounts" :key="item.accountId"
-                 @click="changeAccount(item)">
-          <div class="account">
-            {{ item.email }}
-          </div>
-          <div class="opt">
-            <div class="send-email" @click.stop>
-              <Icon @click="setAllReceive(item)" v-if="!item.allReceive" icon="eva:email-fill" width="22" height="22" color="#fccb1a"/>
-              <Icon @click="setAllReceive(item)" v-else icon="flat-color-icons:folder" width="22" height="22" color="#23c4f1" />
-            </div>
-            <div class="settings" @click.stop>
-              <Icon icon="fluent-color:clipboard-24" width="22" height="22" @click.stop="copyAccount(item.email)"/>
-              <Icon icon="fluent:settings-24-filled" width="21" height="21" color="#909399"
-                    v-if="showNullSetting(item)"/>
-              <el-dropdown v-else>
-                <Icon icon="fluent:settings-24-filled" width="21" height="21" color="#909399"/>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item v-if="hasPerm('email:send')" @click="openSetName(item)">{{ $t('rename') }}</el-dropdown-item>
-                    <el-dropdown-item v-if="item.accountId !== userStore.user.account.accountId" @click="setAsTop(item, index)">{{ $t('pin') }}</el-dropdown-item>
-                    <el-dropdown-item v-if="item.accountId !== userStore.user.account.accountId && hasPerm('account:delete')"
-                                      @click="remove(item)">{{ $t('delete') }}
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-          </div>
-        </el-card>
-
-        <!-- Initial Loading Skeleton -->
-        <template v-if="loading">
-          <el-skeleton v-for="i in skeletonRows" :key="i" animated>
-            <template #template>
-              <el-card class="item">
-                <el-skeleton-item variant="p" style="width: 70%; height: 20px; margin-bottom: 25px"/>
-                <div style="display: flex; justify-content: space-between">
-                  <el-skeleton-item variant="text" style="width: 20px"/>
-                  <el-skeleton-item variant="text" style="width: 20px"/>
-                </div>
-              </el-card>
-            </template>
-          </el-skeleton>
-        </template>
-
-        <!-- Follow Loading Skeleton -->
-        <template v-if="accounts.length > 0 && !noLoading">
-          <el-skeleton animated>
-            <template #template>
-              <el-card class="item">
-                <el-skeleton-item variant="p" style="width: 70%; height: 20px; margin-bottom: 20px"/>
-                <div style="display: flex; justify-content: space-between">
-                  <el-skeleton-item variant="text" style="width: 20px"/>
-                  <el-skeleton-item variant="text" style="width: 20px"/>
-                </div>
-              </el-card>
-            </template>
-          </el-skeleton>
-        </template>
-
-        <div class="noLoading" v-if="noLoading && accounts.length > 0">
-          <div>{{ $t('noMoreData') }}</div>
-        </div>
-        <div class="empty" v-if="noLoading && accounts.length === 0">
-          <el-empty :description="$t('noMessagesFound')"/>
-        </div>
+      <el-skeleton class="account-skeleton" v-if="loading" :rows="5" animated/>
+      <div class="order-load-error" v-else-if="loadFailed && !accounts.length">
+        <p>{{ $t('mailboxOrder.loadFailed') }}</p>
+        <el-button @click="refresh">{{ $t('mailboxOrder.refresh') }}</el-button>
       </div>
-
+      <template v-else>
+        <section class="account-section" v-for="section in sections" :key="section.key" :data-section="section.key">
+          <div class="group-heading" v-if="!section.fixed">
+            <span>{{ $t(section.label) }}</span><span class="group-count">{{ section.total }}</span>
+          </div>
+          <div :ref="el => setGroupElement(section.key, el)" class="group-list" :class="{'is-empty': !section.items.length, 'is-fixed': section.fixed}" :data-group="section.key">
+            <el-card class="item mailbox-item" :class="itemBg(item.accountId)" v-for="item in section.items" :key="item.accountId" :data-account-id="item.accountId" @click="changeAccount(item)">
+              <div class="account-title">
+                <div class="account" :title="item.email">{{ item.email }}</div>
+                <button v-if="!section.fixed && canOrder" type="button" class="mailbox-drag-handle" :disabled="orderBusy" :aria-label="$t('mailboxOrder.drag', {email: item.email})" :title="$t('mailboxOrder.drag', {email: item.email})" @click.stop>
+                  <Icon :icon="mailboxIcons.dragDots" width="18" height="18"/>
+                </button>
+              </div>
+              <div class="mailbox-badges" v-if="item.accountId === order.mainAccountId || isPinned(item)">
+                <span class="mailbox-badge main-badge" v-if="item.accountId === order.mainAccountId">{{ $t('mailboxOrder.main') }}</span>
+                <span class="mailbox-badge pinned-badge" v-if="isPinned(item)"><Icon :icon="mailboxIcons.pin" width="12" height="12"/>{{ $t('mailboxOrder.pinned') }}</span>
+              </div>
+              <div class="opt">
+                <div class="send-email" @click.stop>
+                  <Icon @click="setAllReceive(item)" v-if="!item.allReceive" icon="eva:email-fill" width="22" height="22" color="#fccb1a"/>
+                  <Icon @click="setAllReceive(item)" v-else icon="flat-color-icons:folder" width="22" height="22" color="#23c4f1"/>
+                </div>
+                <div class="settings" @click.stop>
+                  <Icon icon="fluent-color:clipboard-24" width="22" height="22" @click.stop="copyAccount(item.email)"/>
+                  <Icon v-if="showNullSetting(item)" icon="fluent:settings-24-filled" width="21" height="21" color="#909399"/>
+                  <el-dropdown v-else trigger="click" :disabled="orderBusy">
+                    <button class="icon-button mailbox-menu" type="button" :disabled="orderBusy" :aria-label="$t('mailboxOrder.actions', {email: item.email})"><Icon icon="fluent:settings-24-filled" width="21" height="21" color="#909399"/></button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item v-if="hasPerm('email:send')" @click="openSetName(item)">{{ $t('rename') }}</el-dropdown-item>
+                        <el-dropdown-item v-if="canOrder" @click="togglePinned(item)">{{ $t(isPinned(item) ? 'mailboxOrder.unpin' : 'pin') }}</el-dropdown-item>
+                        <el-dropdown-item v-if="canMove(item)" :disabled="!canMoveDirection(item, -1)" @click="moveBy(item, -1)">{{ $t('mailboxOrder.moveUp') }}</el-dropdown-item>
+                        <el-dropdown-item v-if="canMove(item)" :disabled="!canMoveDirection(item, 1)" @click="moveBy(item, 1)">{{ $t('mailboxOrder.moveDown') }}</el-dropdown-item>
+                        <el-dropdown-item v-if="item.accountId !== order.mainAccountId && hasPerm('account:delete')" @click="remove(item)">{{ $t('delete') }}</el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </div>
+              </div>
+            </el-card>
+            <div class="group-empty" v-if="!section.fixed && !section.items.length">{{ $t('mailboxOrder.dropHere') }}</div>
+          </div>
+          <button v-if="!section.fixed && section.items.length < section.total" type="button" class="load-more" @click="showMore(section.key)">{{ $t('mailboxOrder.loadMore', {count: section.total - section.items.length}) }}</button>
+        </section>
+      </template>
     </el-scrollbar>
     <el-dialog v-model="showAdd" :title="$t('addAccount')">
       <div class="container">
@@ -131,14 +135,13 @@
 import {Icon} from "@iconify/vue";
 import {computed, nextTick, reactive, ref, watch} from "vue";
 import {
-  accountList,
   accountAdd,
   accountDelete,
   accountSetName,
-  accountSetAllReceive,
-  accountSetAsTop
+  accountSetAllReceive
 } from "@/request/account.js";
-import {sleep} from "@/utils/time-utils.js"
+import {useMailboxOrder} from './use-mailbox-order.js';
+import mailboxIcons from '@/utils/mailbox-icons.js';
 import {isEmail} from "@/utils/verify-utils.js";
 import {useSettingStore} from "@/store/setting.js";
 import {useAccountStore} from "@/store/account.js";
@@ -157,16 +160,16 @@ const emailStore = useEmailStore();
 const showAdd = ref(false)
 const addLoading = ref(false);
 const domainList = computed(() => settingStore.domainList)
-const accounts = reactive([])
-const noLoading = ref(false)
-const loading = ref(false)
-const followLoading = ref(false);
+const {
+  accounts, order, loading, saving, loadFailed, sections, canOrder, orderBusy, membershipBusy,
+  scrollbarRef, isPinned, canMove, canMoveDirection, setMainFirst, togglePinned, sortBy, moveBy,
+  showMore, setGroupElement, refresh, changeAccount, getAccountList, forgetAccount
+} = useMailboxOrder(addLoading)
 const verifyShow = ref(false)
 const setNameShow = ref(false)
 const setNameLoading = ref(false)
 const accountName = ref(null)
 const addRef = ref({})
-const scrollbarRef = ref({})
 let account = null
 let turnstileId = null
 const botJsError = ref(false)
@@ -175,25 +178,11 @@ let verifyErrorCount = 0
 let turnstileRecoveryAttempted = false
 const turnstileContainer = ref(null)
 const turnstileContainerKey = ref(0)
-let first = true
 const addForm = reactive({
   email: '',
   suffix: settingStore.domainList[0]
 })
-let skeletonRows = 10
-const queryParams = {
-  size: 30
-}
-
 const mySelect = ref()
-
-if (hasPerm('account:query')) {
-  getAccountList()
-}
-
-watch(() => accountStore.changeUserAccountName, () => {
-  accounts[0].name = accountStore.changeUserAccountName
-})
 
 watch(() => settingStore.domainList, (list) => {
   if (!addForm.suffix && list.length > 0) {
@@ -247,12 +236,6 @@ window.onTurnstileSuccess = (token) => {
   verifyToken = token;
 };
 
-function getSkeletonRows() {
-  if (accounts.length > 20) return skeletonRows = 20
-  if (accounts.length === 0) return skeletonRows = 1
-  skeletonRows = accounts.length
-}
-
 function setName() {
 
   if (setNameLoading.value) return
@@ -299,6 +282,7 @@ function openSetName(accountItem) {
 }
 
 function setAllReceive(account) {
+  if (orderBusy.value) return
   let allReceiveAccount = accounts.find(account => account.allReceive === AccountAllReceiveEnum.ENABLED);
   if (allReceiveAccount && allReceiveAccount.accountId !== account.accountId) allReceiveAccount.allReceive = AccountAllReceiveEnum.DISABLED;
   account.allReceive = account.allReceive === AccountAllReceiveEnum.DISABLED ? AccountAllReceiveEnum.ENABLED : AccountAllReceiveEnum.DISABLED;
@@ -321,7 +305,7 @@ function setAllReceive(account) {
 
 
 function showNullSetting(item) {
-  return !hasPerm('email:send') && !(item.accountId !== userStore.user.account.accountId && hasPerm('account:delete'))
+  return !hasPerm('email:send') && !canOrder.value && !(item.accountId !== order.mainAccountId && hasPerm('account:delete'))
 }
 
 function itemBg(accountId) {
@@ -331,66 +315,36 @@ function itemBg(accountId) {
 
 
 function remove(account) {
+  if (orderBusy.value) return
   ElMessageBox.confirm(t('delConfirm', {msg: account.email}), {
     confirmButtonText: t('confirm'),
     cancelButtonText: t('cancel'),
     type: 'warning'
-  }).then(() => {
-    accountDelete(account.accountId).then(() => {
-      const index = accounts.findIndex(item => item.accountId === account.accountId);
-      accounts.splice(index, 1);
-      if (accounts.length < queryParams.size) {
-        getAccountList()
-      }
+  }).then(async () => {
+    if (orderBusy.value) return
+    membershipBusy.value = true
+    try {
+      await accountDelete(account.accountId)
+      forgetAccount(account.accountId)
+      await getAccountList()
       ElMessage({
         message: t('delSuccessMsg'),
         type: 'success',
         plain: true,
       })
-    })
-  });
-}
-
-function refresh() {
-  if (loading.value) {
-    return
-  }
-  loading.value = false
-  followLoading.value = false
-  noLoading.value = false
-  queryParams.accountId = 0
-  queryParams.lastSort = null
-  getSkeletonRows();
-  scrollbarRef.value.setScrollTop(0)
-  accounts.splice(0, accounts.length)
-  getAccountList()
-}
-
-function changeAccount(account) {
-  accountStore.currentAccountId = account.accountId
-  accountStore.currentAccount = account
+    } finally {
+      membershipBusy.value = false
+    }
+  }).catch(() => {});
 }
 
 function add() {
+  if (orderBusy.value) return
   addForm.suffix = addForm.suffix || settingStore.domainList[0]
   showAdd.value = true
   setTimeout(() => {
     addRef.value.focus()
   }, 100)
-}
-
-function setAsTop(account, index) {
-  accountSetAsTop(account.accountId).then(() => {
-    ElMessage({
-      message: t('setSuccess'),
-      type: 'success',
-      plain: true,
-    })
-
-    const [item] = accounts.splice(index, 1);
-    accounts.splice(1, 0, item);
-
-  });
 }
 
 async function copyAccount(account) {
@@ -410,48 +364,6 @@ async function copyAccount(account) {
     })
   }
 }
-
-function getAccountList() {
-
-  if (loading.value || followLoading.value || noLoading.value) return;
-
-  if (accounts.length === 0) {
-    loading.value = true
-  } else {
-    followLoading.value = true
-  }
-
-  let start = Date.now();
-
-  const accountId = accounts.length > 0 ? accounts.at(-1).accountId : 0;
-  const lastSort = accounts.length > 0 ? accounts.at(-1).sort : null;
-
-  accountList(accountId, queryParams.size, lastSort).then(async list => {
-
-    let end = Date.now();
-    let duration = end - start;
-    if (duration < 300) {
-      await sleep(300 - duration)
-    }
-
-    if (list.length < queryParams.size) {
-      noLoading.value = true
-    }
-    if (accounts.length === 0) {
-      accountStore.currentAccount = list[0]
-    }
-
-    accounts.push(...list)
-
-    loading.value = false
-    followLoading.value = false
-    first = false
-  }).catch(() => {
-    loading.value = false
-    followLoading.value = false
-  })
-}
-
 
 function submit() {
 
@@ -514,10 +426,8 @@ function submit() {
   }
 
   addLoading.value = true
-  accountAdd(addForm.email + addForm.suffix, verifyToken).then(account => {
-    addLoading.value = false
+  accountAdd(addForm.email + addForm.suffix, verifyToken).then(async account => {
     addForm.email = ''
-    accounts.push(account)
     verifyToken = ''
     settingStore.settings.addVerifyOpen = account.addVerifyOpen
     ElMessage({
@@ -528,6 +438,8 @@ function submit() {
     verifyShow.value = false
     showAdd.value = false
     userStore.refreshUserInfo()
+    await getAccountList()
+    addLoading.value = false
   }).catch(res => {
     if (res.code === 400) {
       verifyToken = ''
@@ -710,3 +622,4 @@ path[fill="#ffdda1"] {
 }
 
 </style>
+<style scoped lang="scss" src="./mailbox-order.scss"></style>

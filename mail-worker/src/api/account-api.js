@@ -2,6 +2,15 @@ import app from '../hono/hono';
 import accountService from '../service/account-service';
 import result from '../model/result';
 import userContext from '../security/user-context';
+import mailboxOrderService from '../service/mailbox-order-service';
+
+app.get('/account/order', async (c) => {
+	return c.json(result.ok(await mailboxOrderService.get(c, userContext.getUserId(c))));
+});
+
+app.put('/account/order', async (c) => {
+	return c.json(result.ok(await mailboxOrderService.save(c, await c.req.json(), userContext.getUserId(c))));
+});
 
 app.get('/account/list', async (c) => {
 	const list = await accountService.list(c, c.req.query(), userContext.getUserId(c));
