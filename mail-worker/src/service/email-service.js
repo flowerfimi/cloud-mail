@@ -1,3 +1,4 @@
+import addressUtils from '../utils/mailbox-address';
 import orm from '../entity/orm';
 import email from '../entity/email';
 import { emailListColumns, emailBriefColumns, EMAIL_LIST_TEXT_LEN } from '../lib/email-list-columns';
@@ -359,8 +360,7 @@ const emailService = {
 
 		//判断接收方是不是全部为站内邮箱
 		const allInternal = receiveEmail.every(email => {
-			const domain = '@' + emailUtils.getDomain(email);
-			return domainList.includes(domain);
+			return addressUtils.isAllowed(emailUtils.getDomain(email), domainList);
 		});
 
 		if (c.env.admin !== userRow.email) {
@@ -404,7 +404,7 @@ const emailService = {
 
 		if (c.env.admin !== userRow.email) {
 			//用户没有这个域名的使用权限
-			if(!roleService.hasAvailDomainPerm(roleRow.availDomain, accountRow.email)) {
+			if(!roleService.hasAvailDomainPerm(roleRow.availDomain, accountRow.email, c.env.domain)) {
 				throw new BizError(t('noDomainPermSend'),403)
 			}
 
@@ -891,7 +891,7 @@ const emailService = {
 				//如果收件人没有这个域名的使用权限和有邮件拦截，就把邮件改为拒收状态
 				if (email !== c.env.admin) {
 
-					if (!roleService.hasAvailDomainPerm(availDomain, email)) {
+					if (!roleService.hasAvailDomainPerm(availDomain, email, c.env.domain)) {
 						emailValues.status = emailConst.status.BOUNCED;
 						emailValues.message = `The recipient <${email}> is not authorized to use this domain.`;
 					} else if(roleService.isBanEmail(banEmail, sendEmailData.sendEmail)) {

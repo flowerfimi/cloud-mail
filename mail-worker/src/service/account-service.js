@@ -1,5 +1,5 @@
+import addressUtils from '../utils/mailbox-address';
 import BizError from '../error/biz-error';
-import verifyUtils from '../utils/verify-utils';
 import emailUtils from '../utils/email-utils';
 import userService from './user-service';
 import emailService from './email-service';
@@ -20,7 +20,8 @@ const accountService = {
 
 		const { addEmailVerify , addEmail, manyEmail, addVerifyCount, minEmailPrefix, emailPrefixFilter } = await settingService.query(c);
 
-		let { email, token } = params;
+		const { token } = params;
+		const email = addressUtils.build(params, c.env.domain);
 
 
 		if (!(addEmail === settingConst.addEmail.OPEN && manyEmail === settingConst.manyEmail.OPEN)) {
@@ -28,17 +29,6 @@ const accountService = {
 		}
 
 
-		if (!email) {
-			throw new BizError(t('emptyEmail'));
-		}
-
-		if (!verifyUtils.isEmail(email)) {
-			throw new BizError(t('notEmail'));
-		}
-
-		if (!c.env.domain.includes(emailUtils.getDomain(email))) {
-			throw new BizError(t('notExistDomain'));
-		}
 
 		if (emailUtils.getName(email).length < minEmailPrefix) {
 			throw new BizError(t('minEmailPrefix', { msg: minEmailPrefix } ));
@@ -48,23 +38,6 @@ const accountService = {
 			throw new BizError(t('banEmailPrefix'));
 		}
 
-		let accountRow = await this.selectByEmailIncludeDel(c, email);
-
-		if (accountRow && accountRow.isDel === isDel.DELETE) {
-			throw new BizError(t('isDelAccount'));
-		}
-
-		if (accountRow) {
-			throw new BizError(t('isRegAccount'));
-		}
-
-		if (email.includes('+')) {
-			const baseEmail = emailUtils.getBaseEmail(email);
-			const baseAccount = await this.selectByEmailIncludeDel(c, baseEmail);
-			if (!baseAccount || baseAccount.userId !== userId) {
-				throw new BizError(t('notOwner'));
-			}
-		}
 
 		const userRow = await userService.selectById(c, userId);
 		const roleRow = await roleService.selectById(c, userRow.type);
@@ -76,7 +49,7 @@ const accountService = {
 				if(userAccountCount >= roleRow.accountCount) throw new BizError(t('accountLimit'), 403);
 			}
 
-			if(!roleService.hasAvailDomainPerm(roleRow.availDomain, email)) {
+			if(!roleService.hasAvailDomainPerm(roleRow.availDomain, email, c.env.domain)) {
 				throw new BizError(t('noDomainPermAdd'),403)
 			}
 
@@ -97,10 +70,21 @@ const accountService = {
 		}
 
 
-		accountRow = await orm(c).insert(account).values({
-			email, userId, name: emailUtils.getName(email),
-			sort: sql`(SELECT COALESCE(MIN(sort), 0) - 1 FROM account WHERE user_id = ${userId} AND is_del = 0 AND is_pinned = 0)`
-		}).returning().get();
+		const accountRow = await addressUtils.create(params, c.env.domain, async email => {
+			if (userRow.email !== c.env.admin && !roleService.hasAvailDomainPerm(roleRow.availDomain, email, c.env.domain)) {
+				throw new BizError(t('noDomainPermAdd'), 403);
+			}
+			const existing = await this.selectByEmailIncludeDel(c, email);
+			if (existing) throw addressUtils.conflict(t(existing.isDel === isDel.DELETE ? 'isDelAccount' : 'isRegAccount'));
+			if (email.includes('+')) {
+				const baseAccount = await this.selectByEmailIncludeDel(c, emailUtils.getBaseEmail(email));
+				if (!baseAccount || baseAccount.userId !== userId) throw new BizError(t('notOwner'));
+			}
+			return orm(c).insert(account).values({
+				email, userId, name: emailUtils.getName(email),
+				sort: sql`(SELECT COALESCE(MIN(sort), 0) - 1 FROM account WHERE user_id = ${userId} AND is_del = 0 AND is_pinned = 0)`
+			}).returning().get();
+		}, email);
 
 		if (addEmailVerify === settingConst.addEmailVerify.COUNT && !addVerifyOpen) {
 			const row = await verifyRecordService.increaseAddCount(c);

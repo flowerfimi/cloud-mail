@@ -1,3 +1,4 @@
+import addressUtils from '../utils/mailbox-address';
 import role from '../entity/role';
 import orm from '../entity/orm';
 import { eq, asc, inArray, and } from 'drizzle-orm';
@@ -154,21 +155,8 @@ const roleService = {
 		return orm(c).select(role).from(user).leftJoin(role, eq(role.roleId, user.type)).where(eq(user.userId, userId)).get();
 	},
 
-	hasAvailDomainPerm(availDomain, email) {
-
-		availDomain = availDomain.split(',').filter(item => item !== '');
-
-		if (availDomain.length === 0) {
-			return true
-		}
-
-		const availIndex = availDomain.findIndex(item => {
-			const domain = emailUtils.getDomain(email.toLowerCase());
-			const availDomainItem = item.toLowerCase();
-			return domain === availDomainItem
-		})
-
-		return availIndex > -1
+	hasAvailDomainPerm(availDomain, email, domains) {
+		return addressUtils.hasPermission(availDomain, email, domains);
 	},
 
 	selectByName(c, roleName) {

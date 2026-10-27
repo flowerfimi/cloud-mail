@@ -1,4 +1,21 @@
 const zh = {
+    subdomain: {
+        prefix: '邮箱前缀',
+        label: '子域名',
+        root: '根域名',
+        rootMailbox: '根域邮箱',
+        childMailbox: '子域邮箱',
+        mode: '子域名',
+        normal: '普通',
+        random: '随机子域',
+        refresh: '换一个随机子域',
+        randomPrefix: '随机前缀',
+        manual: '手动子域',
+        placeholder: '子域名，如 mail',
+        invalid: '请输入 1–63 位字母、数字或中间连字符。',
+        created: '邮箱已创建',
+        copy: '复制',
+    },
     mailboxOrder: {
         main: '主邮箱',
         mainFirst: '固定主邮箱',

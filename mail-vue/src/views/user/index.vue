@@ -165,31 +165,9 @@
     </el-dialog>
     <el-dialog v-model="showAdd" :title="$t('addUser')" @closed="resetAddForm">
       <div class="container">
-        <el-input v-model="addForm.email" type="text" :placeholder="$t('emailAccount')" autocomplete="off" @keyup.enter="submit">
-          <template #append>
-            <div @click.stop="openSelect">
-              <div inert>
-                <el-select
-                    ref="mySelect"
-                    v-model="addForm.suffix"
-                    :placeholder="$t('select')"
-                    class="select"
-                >
-                  <el-option
-                      v-for="item in domainList"
-                      :key="item"
-                      :label="item"
-                      :value="item"
-                  />
-                </el-select>
-              </div>
-              <div>
-                <span>{{ addForm.suffix }}</span>
-                <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-              </div>
-            </div>
-          </template>
-        </el-input>
+        <SubdomainOptions ref="subdomainOptions" v-model:email="addForm.email" v-model:suffix="addForm.suffix"
+                          v-model:mode="addForm.subdomainMode" v-model:subdomain="addForm.subdomain"
+                          :domains="domainList" :disabled="addLoading" @submit="submit"/>
         <el-input type="password" v-model="addForm.password" :placeholder="$t('password')" @keyup.enter="submit"/>
         <el-select v-model="addForm.type" :placeholder="$t('perm')">
           <el-option v-for="item in roleList" :label="item.name" :value="item.roleId" :key="item.roleId"/>
@@ -199,6 +177,7 @@
         </el-button>
       </div>
     </el-dialog>
+    <CreatedEmail v-model="createdEmail"/>
     <el-dialog class="account-dialog" v-model="accountShow" :title="t('userAccount')" @closed="resetAccountList" >
       <el-table :data="accountList" style="height: 480px" v-loading="accountLoading" element-loading-background="transparent" :empty-text="accountLoading ? '' : null">
         <el-table-column property="email" :label="t('emailAccount')" >
@@ -377,7 +356,7 @@
 </template>
 
 <script setup>
-import {defineOptions, h, reactive, ref, watch} from 'vue'
+import {computed, defineOptions, h, reactive, ref, watch} from 'vue'
 import {
   userList,
   userDelete,
@@ -399,6 +378,9 @@ import {isEmail} from "@/utils/verify-utils.js";
 import {useRoleStore} from "@/store/role.js";
 import {useUserStore} from "@/store/user.js";
 import {useI18n} from 'vue-i18n';
+import {completeEmail, rootDomainSuffixes} from '@/utils/mailbox-domain.js';
+import SubdomainOptions from '@/components/subdomain-options/index.vue';
+import CreatedEmail from '@/components/created-email/index.vue';
 
 defineOptions({
   name: 'user'
@@ -459,13 +441,20 @@ const triggerRef = ref({
     return position.value;
   }
 })
-const domainList = settingStore.domainList
+const domainList = computed(() => rootDomainSuffixes(settingStore.domainList))
+const subdomainOptions = ref(null)
+const createdEmail = ref('')
 
 const addForm = reactive({
   email: '',
-  suffix: settingStore.domainList[0],
+  suffix: domainList.value[0],
+  subdomainMode: 'normal',
+  subdomain: '',
   password: '',
   type: null,
+})
+watch(domainList, list => {
+  if (!list.includes(addForm.suffix)) addForm.suffix = list[0]
 })
 
 const params = reactive({
@@ -491,7 +480,6 @@ const pagerCount = ref(10)
 const settingLoading = ref(false)
 const tableLoading = ref(true)
 const roleList = reactive([])
-const mySelect = ref({})
 const accountList = reactive([])
 const accountParams = reactive({
   size: 10,
@@ -701,13 +689,12 @@ const tableRowFormatter = (data) => {
   return data.row.email
 }
 
-const openSelect = () => {
-  mySelect.value.toggleMenu()
-}
 
 function resetAddForm() {
   addForm.email = ''
   addForm.password = ''
+  addForm.subdomainMode = 'normal'
+  addForm.subdomain = ''
 }
 
 function openAdd() {
@@ -727,7 +714,8 @@ function submit() {
     return
   }
 
-  if (!isEmail(addForm.email + addForm.suffix)) {
+  const email = completeEmail(addForm.email, addForm.suffix)
+  if (!isEmail(email)) {
     ElMessage({
       message: t('notEmailMsg'),
       type: "error",
@@ -735,6 +723,8 @@ function submit() {
     })
     return
   }
+
+  if (!subdomainOptions.value.validate()) return
 
   if (!addForm.password) {
     ElMessage({
@@ -764,9 +754,10 @@ function submit() {
   }
 
   addLoading.value = true
-  const form = {...addForm}
-  form.email = form.email + form.suffix
-  userAdd(form).then(() => {
+  const form = {...addForm, ...subdomainOptions.value.fields()}
+  form.email = email
+  userAdd(form).then(user => {
+    createdEmail.value = user.email
     addLoading.value = false
     showAdd.value = false
     ElMessage({

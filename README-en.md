@@ -147,7 +147,7 @@ cloud-mail
 
 ## Custom features in this fork
 
-Primary mailbox badges and a fixed-position switch, pinned groups, cross-group dragging, sorting by name or creation time, automatic saving, and restored UI typography.
+Primary mailbox badges and a fixed-position switch, pinned groups, cross-group dragging, sorting by name or creation time, automatic saving, and restored UI typography. Mailbox creation, registration, and admin user creation support random prefixes, root domains, random eight-character subdomains, and manual single-level subdomains.
 
 Local checks: run `pnpm test:local` in `mail-worker/` and `pnpm build` in `mail-vue/`.
 

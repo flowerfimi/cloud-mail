@@ -1,4 +1,8 @@
 const zh = {
+	invalidSubdomainMode: '子域名模式无效',
+	subdomainRootRequired: '此模式请选择根域名',
+	invalidSubdomain: '子域名须为 1–63 位字母或数字，连字符只能位于中间',
+	randomAddressUnavailable: '随机地址分配失败，请重试',
 	invalidMailboxOrder: '邮箱排列数据无效，请刷新列表后重试',
 	mailboxOrderConflict: '邮箱列表已发生变化，请刷新后重新调整顺序',
 	IncorrectPwd: '密码输入错误',

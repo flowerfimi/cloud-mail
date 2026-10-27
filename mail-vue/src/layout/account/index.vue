@@ -81,29 +81,9 @@
     </el-scrollbar>
     <el-dialog v-model="showAdd" :title="$t('addAccount')">
       <div class="container">
-        <el-input v-model="addForm.email" ref="addRef" type="text" :placeholder="$t('emailAccount')" autocomplete="off" @keyup.enter="submit">
-          <template #append>
-            <div @click.stop="openSelect">
-              <el-select
-                  ref="mySelect"
-                  v-model="addForm.suffix"
-                  :placeholder="$t('select')"
-                  class="select"
-              >
-                <el-option
-                    v-for="item in domainList"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                />
-              </el-select>
-              <div>
-                <span>{{ addForm.suffix }}</span>
-                <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-              </div>
-            </div>
-          </template>
-        </el-input>
+        <SubdomainOptions ref="subdomainOptions" v-model:email="addForm.email" v-model:suffix="addForm.suffix"
+                          v-model:mode="addForm.subdomainMode" v-model:subdomain="addForm.subdomain"
+                          :domains="domainList" :disabled="addLoading" @submit="submit"/>
         <el-button class="btn" type="primary" @click="submit" :loading="addLoading"
         >{{ $t('add') }}
         </el-button>
@@ -120,6 +100,7 @@
         <span style="font-size: 12px;color: #F56C6C" v-if="botJsError">{{ $t('verifyModuleFailed', {action: $t('add')}) }}</span>
       </div>
     </el-dialog>
+    <CreatedEmail v-model="createdEmail"/>
     <el-dialog v-model="setNameShow" :title="$t('changeUserName')">
       <div class="container">
         <el-input v-model="accountName" type="text" :placeholder="$t('username')" autocomplete="off" @keyup.enter="setName">
@@ -151,6 +132,9 @@ import {hasPerm} from "@/perm/perm.js"
 import {useI18n} from "vue-i18n";
 import {AccountAllReceiveEnum} from "@/enums/account-enum.js";
 import {reloadTurnstileScript} from "@/utils/turnstile-script.js";
+import {completeEmail, rootDomainSuffixes} from '@/utils/mailbox-domain.js';
+import SubdomainOptions from '@/components/subdomain-options/index.vue';
+import CreatedEmail from '@/components/created-email/index.vue';
 
 const {t} = useI18n();
 const userStore = useUserStore();
@@ -159,7 +143,9 @@ const settingStore = useSettingStore();
 const emailStore = useEmailStore();
 const showAdd = ref(false)
 const addLoading = ref(false);
-const domainList = computed(() => settingStore.domainList)
+const domainList = computed(() => rootDomainSuffixes(settingStore.domainList))
+const subdomainOptions = ref(null)
+const createdEmail = ref('')
 const {
   accounts, order, loading, saving, loadFailed, sections, canOrder, orderBusy, membershipBusy,
   scrollbarRef, isPinned, canMove, canMoveDirection, setMainFirst, togglePinned, sortBy, moveBy,
@@ -169,7 +155,6 @@ const verifyShow = ref(false)
 const setNameShow = ref(false)
 const setNameLoading = ref(false)
 const accountName = ref(null)
-const addRef = ref({})
 let account = null
 let turnstileId = null
 const botJsError = ref(false)
@@ -180,20 +165,18 @@ const turnstileContainer = ref(null)
 const turnstileContainerKey = ref(0)
 const addForm = reactive({
   email: '',
-  suffix: settingStore.domainList[0]
+  suffix: domainList.value[0],
+  subdomainMode: 'normal',
+  subdomain: '',
 })
-const mySelect = ref()
 
-watch(() => settingStore.domainList, (list) => {
-  if (!addForm.suffix && list.length > 0) {
+watch(domainList, (list) => {
+  if (!list.includes(addForm.suffix)) {
     addForm.suffix = list[0]
   }
 }, {immediate: true})
 
 
-const openSelect = () => {
-  mySelect.value.toggleMenu()
-}
 
 async function recoverTurnstile() {
   if (turnstileRecoveryAttempted) return
@@ -343,7 +326,7 @@ function add() {
   addForm.suffix = addForm.suffix || settingStore.domainList[0]
   showAdd.value = true
   setTimeout(() => {
-    addRef.value.focus()
+    subdomainOptions.value.focus()
   }, 100)
 }
 
@@ -378,7 +361,7 @@ function submit() {
     return
   }
 
-  if (addForm.email.length < settingStore.settings.minEmailPrefix) {
+  if (addForm.email.trim().split('@')[0].length < settingStore.settings.minEmailPrefix) {
     ElMessage({
       message: t('minEmailPrefix', {msg: settingStore.settings.minEmailPrefix}),
       type: 'error',
@@ -387,7 +370,8 @@ function submit() {
     return
   }
 
-  if (!isEmail(addForm.email + addForm.suffix)) {
+  const email = completeEmail(addForm.email, addForm.suffix)
+  if (!isEmail(email)) {
     ElMessage({
       message: t('notEmailMsg'),
       type: "error",
@@ -395,6 +379,8 @@ function submit() {
     })
     return
   }
+
+  if (!subdomainOptions.value.validate()) return
 
   if (!verifyToken && (settingStore.settings.addEmailVerify === 0 || (settingStore.settings.addEmailVerify === 2 && settingStore.settings.addVerifyOpen))) {
     if (turnstileRecoveryAttempted) return
@@ -426,8 +412,11 @@ function submit() {
   }
 
   addLoading.value = true
-  accountAdd(addForm.email + addForm.suffix, verifyToken).then(async account => {
+  accountAdd(email, verifyToken, subdomainOptions.value.fields()).then(async account => {
+    createdEmail.value = account.email
     addForm.email = ''
+    addForm.subdomainMode = 'normal'
+    addForm.subdomain = ''
     verifyToken = ''
     settingStore.settings.addVerifyOpen = account.addVerifyOpen
     ElMessage({

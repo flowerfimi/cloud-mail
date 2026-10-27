@@ -11,3 +11,7 @@ export function logout() {
 export function register(form) {
     return http.post('/register', form)
 }
+
+export function randomSubdomain() {
+    return http.get('/register/subdomain')
+}

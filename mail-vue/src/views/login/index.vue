@@ -14,31 +14,25 @@
         <span class="form-desc" v-if="show === 'login'">{{ $t('loginTitle') }}</span>
         <span class="form-desc" v-else>{{ $t('regTitle') }}</span>
         <div v-show="show === 'login'">
-          <el-input :class="!hideLoginDomain ? 'email-input' : ''" v-model="form.email"
-                    type="text" :placeholder="$t('emailAccount')" autocomplete="off" @keyup.enter="submit">
-            <template #append v-if="!hideLoginDomain">
-              <div @click.stop="openSelect">
-                <el-select
-                    v-if="show === 'login'"
-                    ref="mySelect"
-                    v-model="suffix"
-                    :placeholder="$t('select')"
-                    class="select"
-                >
-                  <el-option
-                      v-for="item in domainList"
-                      :key="item"
-                      :label="item"
-                      :value="item"
-                  />
-                </el-select>
-                <div style="color: var(--el-text-color-primary)">
-                  <span>{{ suffix }}</span>
-                  <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-                </div>
-              </div>
+          <el-radio-group v-if="showLoginParts" v-model="loginDomainMode" class="login-domain-mode" size="small" :disabled="loginLoading">
+            <el-radio-button value="root">{{ $t('subdomain.rootMailbox') }}</el-radio-button>
+            <el-radio-button value="subdomain">{{ $t('subdomain.childMailbox') }}</el-radio-button>
+          </el-radio-group>
+          <div class="login-address" :class="{'with-domain': showLoginParts}">
+            <el-input v-model="form.email" type="text" :placeholder="$t('emailAccount')"
+                      autocomplete="off" @keyup.enter="submit"/>
+            <template v-if="showLoginParts">
+              <span>@</span>
+              <template v-if="loginDomainMode === 'subdomain'">
+                <el-input v-model="loginSubdomain" :placeholder="$t('subdomain.label')" :aria-label="$t('subdomain.label')"
+                          maxlength="63" autocomplete="off" @keyup.enter="submit"/>
+                <span>.</span>
+              </template>
+              <el-select v-model="suffix" class="login-root" :aria-label="$t('subdomain.root')">
+                <el-option v-for="domain in domainList" :key="domain" :value="domain" :label="domain.replace(/^@/, '')"/>
+              </el-select>
             </template>
-          </el-input>
+          </div>
           <el-input v-model="form.password" :placeholder="$t('password')" type="password" autocomplete="off" @keyup.enter="submit">
           </el-input>
           <el-button class="btn" type="primary" @click="submit" :loading="loginLoading"
@@ -51,31 +45,10 @@
           </el-button>
         </div>
         <div v-show="show !== 'login'">
-          <el-input :class="!hideLoginDomain ? 'email-input' : ''" v-model="registerForm.email" type="text" :placeholder="$t('emailAccount')"
-                    autocomplete="off" @keyup.enter="submitRegister">
-            <template #append v-if="!hideLoginDomain">
-              <div @click.stop="openSelect">
-                <el-select
-                    v-if="show !== 'login'"
-                    ref="mySelect"
-                    v-model="suffix"
-                    :placeholder="$t('select')"
-                    class="select"
-                >
-                  <el-option
-                      v-for="item in domainList"
-                      :key="item"
-                      :label="item"
-                      :value="item"
-                  />
-                </el-select>
-                <div>
-                  <span>{{ suffix }}</span>
-                  <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-                </div>
-              </div>
-            </template>
-          </el-input>
+          <SubdomainOptions ref="subdomainOptions" class="registration-address" controls-first
+                            v-model:email="registerForm.email" v-model:suffix="suffix"
+                            v-model:mode="registerForm.subdomainMode" v-model:subdomain="registerForm.subdomain"
+                            :domains="domainList" :hide-domains="hideLoginDomain" :disabled="registerLoading" @submit="submitRegister"/>
           <el-input v-model="registerForm.password" :placeholder="$t('password')" type="password" autocomplete="off" @keyup.enter="submitRegister"/>
           <el-input v-model="registerForm.confirmPassword" :placeholder="$t('confirmPwd')" type="password"
                     autocomplete="off" @keyup.enter="submitRegister"/>
@@ -112,6 +85,7 @@
         </template>
       </div>
     </div>
+    <CreatedEmail v-model="createdEmail"/>
     <el-dialog class="bind-dialog" v-model="showBindForm"  title="注册邮箱" >
       <div class="bind-container">
         <el-input :class="!hideLoginDomain ? 'email-input' : ''" v-model="bindForm.email" type="text" :placeholder="$t('emailAccount')" autocomplete="off" @keyup.enter="bind">
@@ -155,7 +129,7 @@
 <script setup>
 import router from "@/router";
 import {useRoute} from "vue-router";
-import {computed, nextTick, reactive, ref} from "vue";
+import {computed, nextTick, reactive, ref, watch} from "vue";
 import {login} from "@/request/login.js";
 import {register} from "@/request/login.js";
 import {websiteConfig} from "@/request/setting.js";
@@ -171,6 +145,9 @@ import {permsToRouter} from "@/perm/perm.js";
 import {useI18n} from "vue-i18n";
 import {oauthBindUser, oauthLinuxDoLogin, oauthGithubLogin, oauthGoogleLogin} from "@/request/ouath.js";
 import {reloadTurnstileScript} from "@/utils/turnstile-script.js";
+import {completeEmail, completeLoginEmail, rootDomainSuffixes, validSubdomain} from '@/utils/mailbox-domain.js';
+import SubdomainOptions from '@/components/subdomain-options/index.vue';
+import CreatedEmail from '@/components/created-email/index.vue';
 
 const {t} = useI18n();
 const accountStore = useAccountStore();
@@ -215,15 +192,23 @@ const form = reactive({
 });
 const mySelect = ref()
 const suffix = ref('')
+const loginDomainMode = ref('root')
+const loginSubdomain = ref('')
 const registerForm = reactive({
   email: '',
   password: '',
   confirmPassword: '',
+  subdomainMode: 'normal',
+  subdomain: '',
   code: null
 })
-const domainList = settingStore.domainList;
+const domainList = computed(() => rootDomainSuffixes(settingStore.domainList));
+const subdomainOptions = ref(null)
+const createdEmail = ref('')
 const registerLoading = ref(false)
-suffix.value = domainList[0]
+watch(domainList, list => {
+  if (!list.includes(suffix.value)) suffix.value = list[0] || ''
+}, {immediate: true})
 const verifyShow = ref(false)
 let verifyToken = ''
 let turnstileId = null
@@ -287,7 +272,8 @@ const loginOpacity = computed(() => {
   return uiStore.dark ? `rgba(0, 0, 0, ${opacity})` : `rgba(255, 255, 255, ${opacity})`
 })
 
-const hideLoginDomain = computed(() => settingStore.settings.loginDomain === 1)
+const hideLoginDomain = computed(() => settingStore.settings.loginDomain === 1 || !domainList.value.length)
+const showLoginParts = computed(() => !hideLoginDomain.value && !form.email.includes('@'))
 
 const background = computed(() => {
 
@@ -304,7 +290,7 @@ const openSelect = () => {
 }
 
 const getFullEmail = (email) => {
-  return hideLoginDomain.value ? email : email + suffix.value
+  return completeEmail(email, hideLoginDomain.value ? '' : suffix.value)
 }
 
 const getEmailName = (email) => {
@@ -436,7 +422,12 @@ const submit = () => {
     return
   }
 
-  let email = getFullEmail(form.email);
+  const subdomain = showLoginParts.value && loginDomainMode.value === 'subdomain' ? loginSubdomain.value.trim() : '';
+  if (showLoginParts.value && loginDomainMode.value === 'subdomain' && !validSubdomain(subdomain)) {
+    ElMessage({message: t('subdomain.invalid'), type: 'error', plain: true});
+    return;
+  }
+  const email = completeLoginEmail(form.email, showLoginParts.value ? suffix.value : '', subdomain);
 
   if (!isEmail(email)) {
     ElMessage({
@@ -485,9 +476,6 @@ function refreshWebsiteConfig() {
   websiteConfig().then(setting => {
     settingStore.settings = setting
     settingStore.domainList = setting.domainList
-    if (!suffix.value && setting.domainList.length > 0) {
-      suffix.value = setting.domainList[0]
-    }
     document.title = setting.title
   }).catch(e => {
     console.error(e)
@@ -508,8 +496,6 @@ function submitRegister() {
     return
   }
 
-  console.log(registerForm.email)
-
   if (getEmailName(registerForm.email).length < settingStore.settings.minEmailPrefix) {
     ElMessage({
       message: t('minEmailPrefix', {msg: settingStore.settings.minEmailPrefix}),
@@ -529,6 +515,8 @@ function submitRegister() {
     })
     return
   }
+
+  if (!subdomainOptions.value.validate()) return
 
   if (!registerForm.password) {
     ElMessage({
@@ -603,16 +591,21 @@ function submitRegister() {
 
   registerLoading.value = true
 
-  const form = {
+  const payload = {
     email,
     password: registerForm.password,
     token: verifyToken,
-    code: registerForm.code
+    code: registerForm.code,
+    ...subdomainOptions.value.fields(),
   }
 
-  register(form).then(({regVerifyOpen}) => {
+  register(payload).then(({regVerifyOpen, email: actualEmail}) => {
+    form.email = actualEmail
+    createdEmail.value = actualEmail
     show.value = 'login'
     registerForm.email = ''
+    registerForm.subdomainMode = 'normal'
+    registerForm.subdomain = ''
     registerForm.password = ''
     registerForm.confirmPassword = ''
     registerForm.code = ''
@@ -761,6 +754,16 @@ function submitRegister() {
     margin-left: 20px !important;
   }
 }
+
+.container .login-address { display: flex; align-items: center; gap: 5px; margin-bottom: 18px; color: var(--el-text-color-secondary); }
+.container .login-address > .el-input { flex: 1 1 0; width: 0; min-width: 0; margin-bottom: 0; }
+.container .login-root { flex: 0 0 114px; width: 114px; }
+.login-root :deep(.el-select__wrapper) { min-height: 38px; padding: 0 8px; }
+.login-domain-mode { display: inline-flex; gap: 4px; margin-bottom: 10px; }
+.login-domain-mode :deep(.el-radio-button__inner) { padding: 7px 10px; border: 0 !important; outline: 0; box-shadow: none !important; border-radius: 4px !important; background: transparent; color: var(--el-text-color-secondary); }
+.login-domain-mode :deep(.el-radio-button.is-active .el-radio-button__inner) { background: var(--el-color-primary); color: var(--el-color-white); }
+.login-domain-mode :deep(.el-radio-button__original-radio:focus-visible + .el-radio-button__inner) { outline: 2px solid var(--el-color-primary); outline-offset: 1px; }
+.registration-address { margin-bottom: 18px; }
 
 .bind-container {
   display: grid;

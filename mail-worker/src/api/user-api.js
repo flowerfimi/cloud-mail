@@ -30,8 +30,8 @@ app.get('/user/list', async (c) => {
 });
 
 app.post('/user/add', async (c) => {
-	await userService.add(c, await c.req.json());
-	return c.json(result.ok());
+	const data = await userService.add(c, await c.req.json());
+	return c.json(result.ok(data));
 });
 
 app.put('/user/resetSendCount', async (c) => {

@@ -1,4 +1,21 @@
 const en = {
+    subdomain: {
+        prefix: 'Prefix',
+        label: 'Subdomain',
+        root: 'Root domain',
+        rootMailbox: 'Root domain',
+        childMailbox: 'Subdomain',
+        mode: 'Subdomain',
+        normal: 'Normal',
+        random: 'Random',
+        refresh: 'Generate another random subdomain',
+        randomPrefix: 'Random prefix',
+        manual: 'Manual',
+        placeholder: 'Subdomain, e.g. mail',
+        invalid: 'Use 1–63 letters or digits, with hyphens only in the middle.',
+        created: 'Email address created',
+        copy: 'Copy',
+    },
     mailboxOrder: {
         main: 'Primary',
         mainFirst: 'Primary first',

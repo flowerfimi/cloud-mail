@@ -1,4 +1,8 @@
 const en = {
+	invalidSubdomainMode: 'Invalid subdomain mode',
+	subdomainRootRequired: 'Choose a root domain for this mode',
+	invalidSubdomain: 'Use 1–63 letters or digits with optional hyphens in the middle',
+	randomAddressUnavailable: 'Could not allocate a random address. Please try again.',
 	invalidMailboxOrder: 'Invalid mailbox order. Refresh the list and try again.',
 	mailboxOrderConflict: 'The mailbox list has changed. Refresh it before reordering.',
 	IncorrectPwd: 'Incorrect password',

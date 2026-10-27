@@ -1,3 +1,4 @@
+import addressUtils from '../utils/mailbox-address';
 import BizError from '../error/biz-error';
 import userService from './user-service';
 import emailUtils from '../utils/email-utils';
@@ -7,7 +8,6 @@ import { v4 as uuidv4 } from 'uuid';
 import KvConst from '../const/kv-const';
 import constant from '../const/constant';
 import userContext from '../security/user-context';
-import verifyUtils from '../utils/verify-utils';
 import accountService from './account-service';
 import settingService from './setting-service';
 import saltHashUtils from '../utils/crypto-utils';
@@ -24,7 +24,8 @@ const loginService = {
 
 	async register(c, params, oauth = false) {
 
-		const { email, password, token, code } = params;
+		const { password, token, code } = params;
+		let email = addressUtils.build(params, c.env.domain);
 
 		let { regKey, register, registerVerify, regVerifyCount, minEmailPrefix, emailPrefixFilter } = await settingService.query(c)
 
@@ -35,10 +36,6 @@ const loginService = {
 
 		if (register === settingConst.register.CLOSE) {
 			throw new BizError(t('regDisabled'));
-		}
-
-		if (!verifyUtils.isEmail(email)) {
-			throw new BizError(t('notEmail'));
 		}
 
 		if (emailUtils.getName(email).length < minEmailPrefix) {
@@ -61,10 +58,6 @@ const loginService = {
 			throw new BizError(t('pwdMinLength'));
 		}
 
-		if (!c.env.domain.includes(emailUtils.getDomain(email))) {
-			throw new BizError(t('notEmailDomain'));
-		}
-
 		let type = null;
 		let regKeyId = 0
 
@@ -80,15 +73,6 @@ const loginService = {
 			regKeyId = result?.regKeyId
 		}
 
-		const accountRow = await accountService.selectByEmailIncludeDel(c, email);
-
-		if (accountRow && accountRow.isDel === isDel.DELETE) {
-			throw new BizError(t('isDelUser'));
-		}
-
-		if (accountRow) {
-			throw new BizError(t('isRegAccount'));
-		}
 
 		let defType = null
 
@@ -98,9 +82,9 @@ const loginService = {
 		}
 
 
-		const roleRow = await roleService.selectById(c, type || defType);
+		let roleRow = await roleService.selectById(c, type || defType);
 
-		if(!roleService.hasAvailDomainPerm(roleRow.availDomain, email)) {
+		if(!roleService.hasAvailDomainPerm(roleRow.availDomain, email, c.env.domain)) {
 
 			if (type) {
 				throw new BizError(t('noDomainPermRegKey'),403)
@@ -138,17 +122,25 @@ const loginService = {
 			type = null
 			regKeyId = 0
 			defType = await this.useDefaultRole(c, email)
+			roleRow = await roleService.selectById(c, defType)
 		}
 
 		if (usingRegKey && type) {
 			consumedCode = code
 		}
 
-		let userId
 
 		try {
-			userId = await userService.insert(c, { email, regKeyId, password: hash, salt, type: type || defType });
-			await accountService.insert(c, { userId: userId, email, name: emailUtils.getName(email) });
+			const created = await addressUtils.create(params, c.env.domain, async address => {
+				if (!roleService.hasAvailDomainPerm(roleRow.availDomain, address, c.env.domain)) {
+					throw new BizError(t(type ? 'noDomainPermRegKey' : 'noDomainPermReg'), 403);
+				}
+				const existing = await accountService.selectByEmailIncludeDel(c, address);
+				if (existing) throw addressUtils.conflict(t(existing.isDel === isDel.DELETE ? 'isDelUser' : 'isRegAccount'));
+				const userId = await userService.insertWithAccount(c, { email: address, regKeyId, password: hash, salt, type: type || defType });
+				return { userId, email: address };
+			}, email);
+			email = created.email;
 		} catch (error) {
 			if (consumedCode) {
 				await regKeyService.restoreCount(c, consumedCode)
@@ -156,14 +148,12 @@ const loginService = {
 			throw error
 		}
 
-		await userService.updateUserInfo(c, userId, true);
-
 		if (registerVerify === settingConst.registerVerify.COUNT && !regVerifyOpen) {
 			const row = await verifyRecordService.increaseRegCount(c);
-			return {regVerifyOpen: row.count >= regVerifyCount}
+			return {regVerifyOpen: row.count >= regVerifyCount, email}
 		}
 
-		return {regVerifyOpen}
+		return {regVerifyOpen, email}
 
 	},
 
@@ -196,7 +186,7 @@ const loginService = {
 
 	async useDefaultRole(c, email) {
 		const defaultRole = await roleService.selectDefaultRole(c)
-		if (!roleService.hasAvailDomainPerm(defaultRole.availDomain, email)) {
+		if (!roleService.hasAvailDomainPerm(defaultRole.availDomain, email, c.env.domain)) {
 			throw new BizError(t('noDomainPermReg'), 403)
 		}
 		return defaultRole.roleId

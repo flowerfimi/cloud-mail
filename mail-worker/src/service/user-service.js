@@ -1,3 +1,5 @@
+import addressUtils from '../utils/mailbox-address';
+import account from '../entity/account';
 import BizError from '../error/biz-error';
 import accountService from './account-service';
 import orm from '../entity/orm';
@@ -78,6 +80,23 @@ const userService = {
 	async insert(c, params) {
 		const { userId } = await orm(c).insert(user).values({ ...params }).returning().get();
 		return userId;
+	},
+
+	async insertWithAccount(c, params) {
+		const db = orm(c);
+		const ip = reqUtils.getIp(c);
+		const { os, browser, device } = reqUtils.getUserAgent(c);
+		const [rows] = await db.batch([
+			db.insert(user).values({
+				...params, os, browser, device, createIp: ip, activeIp: ip,
+				activeTime: dayjs().format('YYYY-MM-DD HH:mm:ss'),
+			}).returning({ userId: user.userId }),
+			db.insert(account).values({
+				email: params.email, name: emailUtils.getName(params.email),
+				userId: sql`(SELECT user_id FROM user WHERE email = ${params.email} COLLATE NOCASE)`,
+			}),
+		]);
+		return rows[0].userId;
 	},
 
 	selectByEmailIncludeDel(c, email) {
@@ -323,25 +342,13 @@ const userService = {
 
 	async add(c, params) {
 
-		let { email, type, password } = params;
-
-		if (!c.env.domain.includes(emailUtils.getDomain(email))) {
-			throw new BizError(t('notEmailDomain'));
-		}
+		let { type, password } = params;
+		const email = addressUtils.build(params, c.env.domain);
 
 		if (password.length < 6) {
 			throw new BizError(t('pwdMinLength'));
 		}
 
-		const accountRow = await accountService.selectByEmailIncludeDel(c, email);
-
-		if (accountRow && accountRow.isDel === isDel.DELETE) {
-			throw new BizError(t('isDelUser'));
-		}
-
-		if (accountRow) {
-			throw new BizError(t('isRegAccount'));
-		}
 
 		let role;
 		if (type === undefined) {
@@ -357,11 +364,15 @@ const userService = {
 
 		const { salt, hash } = await saltHashUtils.hashPassword(password);
 
-		const userId = await userService.insert(c, { email, password: hash, salt, type });
-
-		await userService.updateUserInfo(c, userId, true);
-
-		await accountService.insert(c, { userId: userId, email, type, name: emailUtils.getName(email) });
+		return addressUtils.create(params, c.env.domain, async address => {
+			if (!roleService.hasAvailDomainPerm(role.availDomain, address, c.env.domain)) {
+				throw new BizError(t('noDomainPermReg'), 403);
+			}
+			const existing = await accountService.selectByEmailIncludeDel(c, address);
+			if (existing) throw addressUtils.conflict(t(existing.isDel === isDel.DELETE ? 'isDelUser' : 'isRegAccount'));
+			const userId = await this.insertWithAccount(c, { email: address, password: hash, salt, type });
+			return { userId, email: address };
+		}, email);
 	},
 
 	async resetDaySendCount(c) {
