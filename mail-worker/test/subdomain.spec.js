@@ -368,6 +368,37 @@ describe('Subdomain creation using isolated D1 and KV', () => {
 		expect(received.map(row => row.to_email).sort()).toEqual([receiver.email, 'inside+tag@team.example.com'].sort());
 	});
 
+	it('treats child-domain CC and BCC as internal recipients', async () => {
+		const cc = await create('/register', { email: 'carbon@example.com', subdomainMode: 'manual', subdomain: 'cc' });
+		const bcc = await create('/register', { email: 'blind@example.com', subdomainMode: 'manual', subdomain: 'bcc' });
+		await configure({ send: 0 });
+		const accountId = await env.db.prepare('SELECT account_id FROM account WHERE email = ?')
+			.bind('admin@example.com').first('account_id');
+		const message = {
+			accountId, receiveEmail: ['admin@example.com'], ccEmail: [cc.email], bccEmail: [bcc.email],
+			subject: 'Internal copies', text: 'Internal body', content: '<p>Internal body</p>',
+		};
+		await success('/email/send', { token: admin.token, body: message });
+		const { results } = await env.db.prepare('SELECT to_email FROM email WHERE type = 0 AND subject = ? ORDER BY to_email')
+			.bind(message.subject).all();
+		expect(results.map(row => row.to_email)).toEqual(['admin@example.com', bcc.email, cc.email]);
+		const externalCopy = await request('/email/send', {
+			token: admin.token, body: { ...message, bccEmail: ['outside@sender.test'] },
+		});
+		expect(externalCopy.code).not.toBe(200);
+	});
+
+	it('requires Turnstile for a subdomain login when enabled', async () => {
+		const { email } = await create('/register', { email: 'human@example.com', subdomainMode: 'manual', subdomain: 'team' });
+		await configure({ loginVerify: 0 });
+		const unverified = await request('/login', { body: { email, password } });
+		expect(unverified.code).toBe(400);
+		const verify = vi.spyOn(turnstileService, 'verify').mockResolvedValue(undefined);
+		const { token } = await success('/login', { body: { email, password, token: 'local-test-verification' } });
+		expect(verify).toHaveBeenCalledWith(expect.anything(), 'local-test-verification');
+		expect(token).toBeTypeOf('string');
+	});
+
 	it('requires external sender credentials for the full child domain', async () => {
 		const sender = await create('/account/add', { email: 'sender@example.com', subdomainMode: 'manual', subdomain: 'team' });
 		await configure({ send: 0, resendTokens: { 'example.com': 'local-test-root-token' } });
